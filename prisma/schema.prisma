@@ -18,6 +18,18 @@ enum MembershipRole {
   EMPLOYEE
 }
 
+enum InvitationRole {
+  MANAGER
+  EMPLOYEE
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
 model User {
   id            String       @id @default(cuid())
   name          String
@@ -29,9 +41,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sessions    Session[]
-  accounts    Account[]
-  memberships Membership[]
+  sessions        Session[]
+  accounts        Account[]
+  memberships     Membership[]
+  sentInvitations OrganizationInvitation[] @relation("InvitationSender")
 }
 
 model Session {
@@ -39,7 +52,7 @@ model Session {
   expiresAt DateTime
   token     String   @unique
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime
   ipAddress String?
   userAgent String?
   userId    String
@@ -75,7 +88,7 @@ model Verification {
   value      String   @db.Text
   expiresAt  DateTime
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  updatedAt  DateTime
 
   @@index([identifier])
 }
@@ -89,6 +102,7 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   memberships Membership[]
+  invitations OrganizationInvitation[]
 }
 
 model Membership {
@@ -104,4 +118,27 @@ model Membership {
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
+}
+
+model OrganizationInvitation {
+  id              String           @id @default(cuid())
+  organizationId  String
+  email           String
+  role            InvitationRole   @default(EMPLOYEE)
+  tokenHash       String           @unique
+  invitedByUserId String
+  status          InvitationStatus @default(PENDING)
+
+  expiresAt  DateTime
+  acceptedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("InvitationSender", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([email, status])
+  @@index([expiresAt])
 }
