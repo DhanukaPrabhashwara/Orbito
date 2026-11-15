@@ -196,3 +196,84 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: RouteContext
+) {
+  try {
+    const { organizationId } = await params;
+
+    const context = await requireOrganizationPermission(
+      organizationId,
+      "REMOVE_MEMBERS"
+    );
+
+    const url = new URL(request.url);
+    const membershipId = url.searchParams.get("membershipId");
+
+    if (!membershipId || !membershipId.trim()) {
+      return NextResponse.json(
+        { error: "A valid membership ID is required." },
+        { status: 400 }
+      );
+    }
+
+    const targetMembership = await prisma.membership.findFirst({
+      where: {
+        id: membershipId,
+        organizationId,
+      },
+    });
+
+    if (!targetMembership) {
+      return NextResponse.json(
+        { error: "Member not found in this organization." },
+        { status: 404 }
+      );
+    }
+
+    if (targetMembership.userId === context.user.id) {
+      return NextResponse.json(
+        { error: "You cannot remove yourself from the organization." },
+        { status: 403 }
+      );
+    }
+
+    if (targetMembership.role === "OWNER") {
+      return NextResponse.json(
+        { error: "An organization owner cannot be removed." },
+        { status: 403 }
+      );
+    }
+
+    await prisma.membership.delete({
+      where: {
+        id: targetMembership.id,
+      },
+    });
+
+    return NextResponse.json({
+      message: "Member removed successfully.",
+      membershipId: targetMembership.id,
+    });
+  } catch (error) {
+    if (error instanceof OrganizationAccessError) {
+      const status =
+        error.code === "UNAUTHENTICATED" ? 401 : 403;
+
+      return NextResponse.json(
+        { error: error.message },
+        { status }
+      );
+    }
+
+    console.error("Member removal error:", error);
+
+    return NextResponse.json(
+      { error: "Internal server error." },
+      { status: 500 }
+    );
+  }
+}
+
