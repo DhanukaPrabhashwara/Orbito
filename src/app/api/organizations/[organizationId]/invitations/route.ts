@@ -14,6 +14,93 @@ type RouteContext = {
   }>;
 };
 
+export async function GET(
+  _request: Request,
+  { params }: RouteContext
+) {
+  try {
+    const { organizationId } = await params;
+
+    await requireOrganizationPermission(
+      organizationId,
+      "INVITE_MEMBERS"
+    );
+
+    const now = new Date();
+
+    // Mark expired pending invitations
+    await prisma.organizationInvitation.updateMany({
+      where: {
+        organizationId,
+        status: "PENDING",
+        expiresAt: {
+          lte: now,
+        },
+      },
+      data: {
+        status: "EXPIRED",
+      },
+    });
+
+    // Retrieve invitations for this organization
+    const invitations =
+      await prisma.organizationInvitation.findMany({
+        where: {
+          organizationId,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          status: true,
+          expiresAt: true,
+          acceptedAt: true,
+          createdAt: true,
+          invitedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+    return NextResponse.json({
+      success: true,
+      total: invitations.length,
+      invitations,
+    });
+  } catch (error) {
+    if (error instanceof OrganizationAccessError) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: error.message,
+        },
+        {
+          status:
+            error.code === "UNAUTHENTICATED" ? 401 : 403,
+        }
+      );
+    }
+
+    console.error("Get invitations error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        message: "An unexpected error occurred.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
 export async function POST(
   request: Request,
   { params }: RouteContext
