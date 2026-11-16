@@ -1,92 +1,82 @@
 export const instant = false;
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import LogoutButton from "@/components/logout-button";
+import Link from "next/link";
 
-export default async function DashboardPage() {
-    // Verify the user's session on the server.
-    const session = await auth.api.getSession({
-        headers: await headers(),
-    });
+const overviewCards = [
+  {
+    title: "Projects",
+    description: "Organize and track your team's projects.",
+    href: "/dashboard/projects",
+    status: "Coming soon",
+  },
+  {
+    title: "Team Members",
+    description: "Manage your workspace members and roles.",
+    href: "/dashboard/members",
+    status: "Available",
+  },
+  {
+    title: "Invitations",
+    description: "Invite people to collaborate in your workspace.",
+    href: "/dashboard/invitations",
+    status: "Available",
+  },
+];
 
-    // Unauthenticated users cannot access the dashboard.
-    if (!session) {
-        redirect("/login");
-    }
+export default function DashboardPage() {
+  return (
+    <div className="mx-auto max-w-7xl">
+      {/* Page Heading */}
+      <div className="mb-8">
+        <p className="text-sm font-medium text-indigo-600">
+          WORKSPACE OVERVIEW
+        </p>
 
-    // Find the organization the user belongs to.
-    const membership = await prisma.membership.findFirst({
-        where: {
-            userId: session.user.id,
-        },
-        include: {
-            organization: true,
-        },
-    });
+        <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+          Welcome to Orbito
+        </h2>
 
-    return (
-        <main className="min-h-screen bg-zinc-50">
-            <header className="border-b border-zinc-200 bg-white">
-                <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-                    <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
-                        orbito<span className="text-indigo-600">.</span>
-                    </h1>
+        <p className="mt-2 text-slate-500">
+          Manage your workspace, team, and projects from one place.
+        </p>
+      </div>
 
-                    <div className="flex items-center gap-4">
-                        <span className="text-sm text-zinc-600">
-                            {session.user.name}
-                        </span>
-                        <LogoutButton />
-                    </div>
-                </div>
-            </header>
+      {/* Overview Cards */}
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {overviewCards.map((card) => (
+          <div
+            key={card.title}
+            className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-900">
+                {card.title}
+              </h3>
 
-            <section className="mx-auto max-w-7xl px-6 py-12">
-                <div className="mb-8">
-                    <p className="text-sm font-medium text-indigo-600">
-                        YOUR WORKSPACE
-                    </p>
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                  card.status === "Available"
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {card.status}
+              </span>
+            </div>
 
-                    <h2 className="mt-2 text-3xl font-bold text-zinc-900">
-                        Welcome, {session.user.name}!
-                    </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-500">
+              {card.description}
+            </p>
 
-                    <p className="mt-2 text-zinc-500">
-                        Here's your Orbito workspace.
-                    </p>
-                </div>
-
-                {membership ? (
-                    <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                        <h3 className="text-xl font-semibold text-zinc-900">
-                            {membership.organization.name}
-                        </h3>
-
-                        <p className="mt-2 text-sm text-zinc-500">
-                            Workspace slug: {membership.organization.slug}
-                        </p>
-
-                        <div className="mt-4">
-                            <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">
-                                {membership.role}
-                            </span>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
-                        <h3 className="font-semibold text-amber-900">
-                            Workspace setup incomplete
-                        </h3>
-
-                        <p className="mt-2 text-sm text-amber-800">
-                            Your account exists, but no workspace membership was found.
-                            We'll complete workspace setup before you continue.
-                        </p>
-                    </div>
-                )}
-            </section>
-        </main>
-    );
+            <Link
+              href={card.href}
+              className="mt-6 inline-flex text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+            >
+              Explore
+              <span className="ml-2">→</span>
+            </Link>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
