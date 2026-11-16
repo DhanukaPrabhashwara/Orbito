@@ -1,15 +1,17 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  EmptyState,
+  Icon,
+  LoadingState,
+  Notice,
+  PageHeader,
+} from "@/components/ui";
 
 type OrganizationRole = "OWNER" | "MANAGER" | "EMPLOYEE";
 type InvitationRole = "MANAGER" | "EMPLOYEE";
-type InvitationStatus =
-  | "PENDING"
-  | "ACCEPTED"
-  | "REVOKED"
-  | "EXPIRED";
+type InvitationStatus = "PENDING" | "ACCEPTED" | "REVOKED" | "EXPIRED";
 
 type Invitation = {
   id: string;
@@ -44,40 +46,58 @@ export default function InvitationsClient({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const canManageInvitations = currentRole !== "EMPLOYEE";
 
   const baseUrl = `/api/organizations/${organizationId}/invitations`;
 
+  const requestInvitations = useCallback(
+    async (signal?: AbortSignal) => {
+      const response = await fetch(
+        `/api/organizations/${organizationId}/invitations`,
+        { credentials: "include", signal },
+      );
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(
+          data.error || data.message || "Failed to load invitations.",
+        );
+      return data.invitations as Invitation[];
+    },
+    [organizationId],
+  );
+
   const fetchInvitations = useCallback(async () => {
     try {
-      setLoading(true);
       setError("");
-
-      const response = await fetch(baseUrl);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to load invitations.");
-      }
-
-      setInvitations(data.invitations);
+      setInvitations(await requestInvitations());
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong."
-      );
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
-  }, [baseUrl]);
+  }, [requestInvitations]);
 
   useEffect(() => {
-    fetchInvitations();
-  }, [fetchInvitations]);
+    const controller = new AbortController();
+    requestInvitations(controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setInvitations(data);
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted)
+          setError(
+            err instanceof Error ? err.message : "Something went wrong.",
+          );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [requestInvitations]);
 
   async function handleCreateInvitation(
-    event: React.FormEvent<HTMLFormElement>
+    event: React.FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault();
 
@@ -107,11 +127,7 @@ export default function InvitationsClient({
 
       await fetchInvitations();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong."
-      );
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setCreating(false);
     }
@@ -119,7 +135,7 @@ export default function InvitationsClient({
 
   async function handleRevokeInvitation(invitationId: string) {
     const confirmed = window.confirm(
-      "Are you sure you want to revoke this invitation?"
+      "Are you sure you want to revoke this invitation?",
     );
 
     if (!confirmed) return;
@@ -129,12 +145,9 @@ export default function InvitationsClient({
     setSuccess("");
 
     try {
-      const response = await fetch(
-        `${baseUrl}/${invitationId}`,
-        {
-          method: "PATCH",
-        }
-      );
+      const response = await fetch(`${baseUrl}/${invitationId}`, {
+        method: "PATCH",
+      });
 
       const data = await response.json();
 
@@ -145,11 +158,7 @@ export default function InvitationsClient({
       setSuccess(data.message);
       await fetchInvitations();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong."
-      );
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setProcessingId(null);
     }
@@ -167,226 +176,254 @@ export default function InvitationsClient({
   function getStatusStyle(status: InvitationStatus) {
     switch (status) {
       case "PENDING":
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-amber-50 text-amber-700 ring-amber-200";
       case "ACCEPTED":
-        return "bg-green-100 text-green-800";
+        return "bg-emerald-50 text-emerald-700 ring-emerald-200";
       case "REVOKED":
-        return "bg-red-100 text-red-800";
+        return "bg-red-50 text-red-700 ring-red-200";
       case "EXPIRED":
-        return "bg-gray-100 text-gray-700";
+        return "bg-slate-50 text-slate-500 ring-slate-200";
     }
   }
 
   function formatDate(date: string) {
-    return new Date(date).toLocaleDateString();
+    return new Date(date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   }
+
+  const visibleInvitations = invitations.filter(
+    (invitation) =>
+      statusFilter === "ALL" || invitation.status === statusFilter,
+  );
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Invitations
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Invite people to join your workspace and manage their invitations.
-        </p>
-      </div>
-
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
-          {success}
-        </div>
-      )}
-
+      <PageHeader
+        eyebrow="People & access"
+        title="Bring your team together"
+        description="Invite people into your workspace and keep track of every invitation."
+      />
+      {error && <Notice error>{error}</Notice>}
+      {success && <Notice>{success}</Notice>}
       {canManageInvitations && (
-        <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Invite a team member
-          </h2>
-
+        <section className="ui-panel overflow-hidden">
+          <div className="flex gap-4 border-b border-slate-100 px-6 py-5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <Icon name="mail" />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                A place for your next teammate
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                Enter their email and choose how they&apos;ll work with your
+                team.
+              </p>
+            </div>
+          </div>
           <form
             onSubmit={handleCreateInvitation}
-            className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-[1fr_180px_auto]"
+            className="grid grid-cols-1 gap-4 p-6 md:grid-cols-[minmax(0,1fr)_160px_auto]"
           >
             <div>
-              <label
-                htmlFor="invite-email"
-                className="mb-2 block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="invite-email" className="ui-label">
                 Email address
               </label>
               <input
                 id="invite-email"
                 type="email"
+                autoComplete="email"
                 required
+                disabled={creating}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="colleague@example.com"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                placeholder="colleague@company.com"
+                className="ui-input"
               />
             </div>
-
             <div>
-              <label
-                htmlFor="invite-role"
-                className="mb-2 block text-sm font-medium text-gray-700"
-              >
-                Organization role
+              <label htmlFor="invite-role" className="ui-label">
+                Workspace role
               </label>
               <select
                 id="invite-role"
                 value={role}
+                disabled={creating}
                 onChange={(event) =>
                   setRole(event.target.value as InvitationRole)
                 }
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-indigo-500"
+                className="ui-input"
               >
                 <option value="EMPLOYEE">Employee</option>
                 <option value="MANAGER">Manager</option>
               </select>
             </div>
-
             <div className="flex items-end">
               <button
                 type="submit"
                 disabled={creating}
-                className="w-full rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="ui-button min-h-11 w-full"
               >
+                <Icon name="plus" className="h-4 w-4" />
                 {creating ? "Sending..." : "Send invitation"}
               </button>
             </div>
           </form>
-
+          <p className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 px-6 py-3 text-xs leading-5 text-slate-500">
+            <Icon name="lock" className="h-3.5 w-3.5" />
+            Managers can invite teammates. Only owners can change member roles.
+          </p>
           {invitationUrl && (
-            <div className="mt-5 rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+            <div className="m-6 mt-4 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
               <p className="text-sm font-medium text-indigo-900">
-                Invitation link generated
+                Your invitation is ready to share
               </p>
-              <p className="mt-1 break-all text-xs text-indigo-700">
+              <p className="mt-2 break-all font-mono text-xs leading-5 text-indigo-600">
                 {invitationUrl}
               </p>
               <button
                 type="button"
                 onClick={handleCopyLink}
-                className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                className="ui-button-secondary mt-3 text-xs"
               >
                 Copy invitation link
               </button>
-              <p className="mt-2 text-xs text-indigo-700">
-                This development link is available for local testing.
-              </p>
             </div>
           )}
         </section>
       )}
-
-      <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+      <section className="ui-panel overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-5">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-sm font-semibold text-slate-900">
               Invitation history
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              {invitations.length} invitation(s)
+            <p className="mt-1 text-xs text-slate-500">
+              {loading
+                ? "Loading invitations..."
+                : `${invitations.length} total invitations`}
             </p>
           </div>
-
-          <button
-            type="button"
-            onClick={fetchInvitations}
-            disabled={loading}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <select
+              aria-label="Filter invitations by status"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="ui-input min-h-10 w-auto text-xs"
+            >
+              <option value="ALL">All statuses</option>
+              <option value="PENDING">Pending</option>
+              <option value="ACCEPTED">Accepted</option>
+              <option value="REVOKED">Revoked</option>
+              <option value="EXPIRED">Expired</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(true);
+                setError("");
+                void fetchInvitations();
+              }}
+              disabled={loading}
+              className="ui-button-secondary px-3"
+              aria-label="Refresh invitations"
+            >
+              <Icon
+                name="refresh"
+                className={`h-4 w-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`}
+              />
+            </button>
+          </div>
         </div>
-
         {loading ? (
-          <div className="p-10 text-center text-sm text-gray-500">
-            Loading invitations...
-          </div>
-        ) : invitations.length === 0 ? (
-          <div className="p-10 text-center">
-            <p className="font-medium text-gray-700">
-              No invitations found
-            </p>
-            <p className="mt-1 text-sm text-gray-500">
-              Invitations you create will appear here.
-            </p>
-          </div>
+          <LoadingState label="Loading invitations" />
+        ) : error && invitations.length === 0 ? (
+          <EmptyState
+            icon="mail"
+            title="Invitations couldn't be loaded"
+            description="Use the refresh button above to try again."
+          />
+        ) : visibleInvitations.length === 0 ? (
+          <EmptyState
+            icon="mail"
+            title={
+              statusFilter === "ALL"
+                ? "Great teams start with an invitation"
+                : "No invitations with this status"
+            }
+            description={
+              statusFilter === "ALL"
+                ? "Invitations will appear here so you can follow their progress."
+                : "Choose another status to see more invitations."
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+            <table className="ui-table">
+              <caption className="sr-only">
+                Workspace invitations and their status
+              </caption>
+              <thead>
                 <tr>
-                  <th className="px-6 py-4 font-medium">Email</th>
-                  <th className="px-6 py-4 font-medium">Role</th>
-                  <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium">Invited by</th>
-                  <th className="px-6 py-4 font-medium">Created</th>
-                  <th className="px-6 py-4 font-medium">Expires</th>
+                  <th scope="col">Invited teammate</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Invited by</th>
+                  <th scope="col">Created</th>
+                  <th scope="col">Expires</th>
                   {canManageInvitations && (
-                    <th className="px-6 py-4 text-right font-medium">
-                      Actions
+                    <th scope="col" className="text-right">
+                      Action
                     </th>
                   )}
                 </tr>
               </thead>
-
-              <tbody className="divide-y divide-gray-100">
-                {invitations.map((invitation) => (
-                  <tr key={invitation.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-6 py-4 font-medium text-gray-900">
+              <tbody>
+                {visibleInvitations.map((invitation) => (
+                  <tr key={invitation.id}>
+                    <td className="whitespace-nowrap font-medium text-slate-800">
                       {invitation.email}
                     </td>
-
-                    <td className="whitespace-nowrap px-6 py-4 text-gray-600">
-                      {invitation.role}
+                    <td className="text-xs text-slate-500 capitalize">
+                      {invitation.role.toLowerCase()}
                     </td>
-
-                    <td className="whitespace-nowrap px-6 py-4">
+                    <td>
                       <span
-                        className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusStyle(
-                          invitation.status
-                        )}`}
+                        className={`ui-badge ${getStatusStyle(invitation.status)}`}
                       >
-                        {invitation.status}
+                        <span className="h-1 w-1 rounded-full bg-current" />
+                        {invitation.status.toLowerCase()}
                       </span>
                     </td>
-
-                    <td className="whitespace-nowrap px-6 py-4 text-gray-600">
+                    <td className="whitespace-nowrap text-xs text-slate-500">
                       {invitation.invitedBy.name || "Unknown"}
                     </td>
-
-                    <td className="whitespace-nowrap px-6 py-4 text-gray-600">
+                    <td className="whitespace-nowrap text-xs text-slate-500">
                       {formatDate(invitation.createdAt)}
                     </td>
-
-                    <td className="whitespace-nowrap px-6 py-4 text-gray-600">
+                    <td className="whitespace-nowrap text-xs text-slate-500">
                       {formatDate(invitation.expiresAt)}
                     </td>
-
                     {canManageInvitations && (
-                      <td className="whitespace-nowrap px-6 py-4 text-right">
-                        {invitation.status === "PENDING" && (
+                      <td className="text-right">
+                        {invitation.status === "PENDING" ? (
                           <button
                             type="button"
                             onClick={() =>
                               handleRevokeInvitation(invitation.id)
                             }
                             disabled={processingId === invitation.id}
-                            className="font-medium text-red-600 hover:text-red-800 disabled:opacity-50"
+                            className="rounded-lg px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                           >
                             {processingId === invitation.id
                               ? "Revoking..."
                               : "Revoke"}
                           </button>
+                        ) : (
+                          <span className="text-slate-300">?</span>
                         )}
                       </td>
                     )}
@@ -394,6 +431,12 @@ export default function InvitationsClient({
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {!loading && !error && invitations.length > 0 && (
+          <div className="border-t border-slate-100 px-6 py-3.5 text-xs text-slate-400">
+            Showing {visibleInvitations.length} of {invitations.length}{" "}
+            invitations
           </div>
         )}
       </section>

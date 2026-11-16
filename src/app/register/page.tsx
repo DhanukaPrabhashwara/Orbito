@@ -1,8 +1,8 @@
-
 "use client";
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
+import { Brand } from "@/components/ui";
 import { authClient } from "@/lib/auth-client";
 
 export default function RegisterPage() {
@@ -47,7 +47,7 @@ export default function RegisterPage() {
 
       if (data) {
         setSuccess(
-          "Your account has been created successfully! Organization setup is our next step."
+          "Your account has been created successfully! Organization setup is our next step.",
         );
 
         setName("");
@@ -63,14 +63,12 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 py-12">
+    <main className="auth-background flex min-h-screen items-center justify-center bg-[#fbfcff] px-5 py-12">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <Link href="/" className="text-3xl font-bold tracking-tight text-zinc-900">
-            orbito<span className="text-indigo-600">.</span>
-          </Link>
+          <Brand />
 
-          <h1 className="mt-6 text-2xl font-semibold text-zinc-900">
+          <h1 className="mt-6 text-3xl font-semibold tracking-tight text-slate-900">
             Create your account
           </h1>
 
@@ -79,7 +77,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_16px_48px_-24px_#3730a330] sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label
@@ -99,7 +97,7 @@ export default function RegisterPage() {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Enter your full name"
-                className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm placeholder:text-zinc-400 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                className="ui-input min-h-12"
               />
             </div>
 
@@ -119,7 +117,7 @@ export default function RegisterPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
-                className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm placeholder:text-zinc-400 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                className="ui-input min-h-12"
               />
             </div>
 
@@ -140,7 +138,7 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="At least 8 characters"
-                className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm placeholder:text-zinc-400 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                className="ui-input min-h-12"
               />
             </div>
 
@@ -160,7 +158,7 @@ export default function RegisterPage() {
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="Re-enter your password"
-                className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm placeholder:text-zinc-400 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                className="ui-input min-h-12"
               />
             </div>
 
@@ -185,7 +183,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="ui-button min-h-12 w-full"
             >
               {isLoading ? "Creating account..." : "Create account"}
             </button>
