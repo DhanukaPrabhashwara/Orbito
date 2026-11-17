@@ -30,6 +30,28 @@ enum InvitationStatus {
   EXPIRED
 }
 
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
 model User {
   id            String       @id @default(cuid())
   name          String
@@ -45,6 +67,8 @@ model User {
   accounts        Account[]
   memberships     Membership[]
   sentInvitations OrganizationInvitation[] @relation("InvitationSender")
+  createdProjects Project[]                @relation("ProjectCreator")
+  createdTasks    Task[]                   @relation("TaskCreator")
 }
 
 model Session {
@@ -103,6 +127,7 @@ model Organization {
 
   memberships Membership[]
   invitations OrganizationInvitation[]
+  projects    Project[]
 }
 
 model Membership {
@@ -115,6 +140,9 @@ model Membership {
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  projectMemberships ProjectMember[]
+  assignedTasks      Task[]          @relation("TaskAssignee")
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -141,4 +169,69 @@ model OrganizationInvitation {
   @@index([organizationId, status])
   @@index([email, status])
   @@index([expiresAt])
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?       @db.Text
+  status      ProjectStatus @default(PLANNING)
+  startDate   DateTime?
+  dueDate     DateTime?
+
+  organizationId  String
+  createdByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("ProjectCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  members ProjectMember[]
+  tasks   Task[]
+
+  @@index([organizationId, status])
+  @@index([createdByUserId])
+}
+
+model ProjectMember {
+  id           String @id @default(cuid())
+  projectId    String
+  membershipId String
+
+  joinedAt DateTime @default(now())
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, membershipId])
+  @@index([membershipId])
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  title       String
+  description String?      @db.Text
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?
+
+  projectId              String
+  createdByUserId        String?
+  assignedToMembershipId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdBy User? @relation("TaskCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  assignedTo Membership? @relation("TaskAssignee", fields: [assignedToMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, status])
+  @@index([assignedToMembershipId])
+  @@index([createdByUserId])
+  @@index([dueDate])
 }
