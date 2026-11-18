@@ -303,6 +303,27 @@ export async function DELETE(
       );
     }
 
+    const activeAssignedTasks = await prisma.task.count({
+      where: {
+        projectId: project.id,
+        assignedToMembershipId: membershipId,
+        status: {
+          not: "DONE",
+        },
+      },
+    });
+
+    if (activeAssignedTasks > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This member cannot be removed because they have unfinished tasks assigned to them.",
+          activeAssignedTasks,
+        },
+        { status: 409 }
+      );
+    }
+
     await prisma.projectMember.delete({
       where: {
         id: projectMember.id,

@@ -11,7 +11,11 @@ export type OrganizationPermission =
   | "VIEW_PROJECTS"
   | "CREATE_PROJECTS"
   | "UPDATE_PROJECTS"
-  | "DELETE_PROJECTS";
+  | "DELETE_PROJECTS"
+  | "VIEW_TASKS"
+  | "CREATE_TASKS"
+  | "UPDATE_TASKS"
+  | "DELETE_TASKS";
 
 const rolePermissions: Record<
   OrganizationRole,
@@ -28,6 +32,10 @@ const rolePermissions: Record<
     "CREATE_PROJECTS",
     "UPDATE_PROJECTS",
     "DELETE_PROJECTS",
+    "VIEW_TASKS",
+    "CREATE_TASKS",
+    "UPDATE_TASKS",
+    "DELETE_TASKS",
   ],
 
   MANAGER: [
@@ -37,12 +45,18 @@ const rolePermissions: Record<
     "VIEW_PROJECTS",
     "CREATE_PROJECTS",
     "UPDATE_PROJECTS",
+    "VIEW_TASKS",
+    "CREATE_TASKS",
+    "UPDATE_TASKS",
+    "DELETE_TASKS",
   ],
 
   EMPLOYEE: [
     "VIEW_ORGANIZATION",
     "VIEW_MEMBERS",
     "VIEW_PROJECTS",
+    "VIEW_TASKS",
+    "UPDATE_TASKS",
   ],
 };
 
