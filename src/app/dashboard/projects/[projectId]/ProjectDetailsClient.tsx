@@ -477,7 +477,6 @@ export default function ProjectDetailsClient({
                 </div>
             </section>
 
-
             <section className="ui-panel p-6">
                 <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                     <div>
