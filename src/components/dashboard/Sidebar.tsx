@@ -6,6 +6,7 @@ import { Brand, Icon, type IconName } from "@/components/ui";
 
 const navigation: { label: string; href: string; icon: IconName }[] = [
   { label: "Overview", href: "/dashboard", icon: "overview" },
+  { label: "Projects", href: "/dashboard/projects", icon: "folder" },
   { label: "Members", href: "/dashboard/members", icon: "members" },
   { label: "Invitations", href: "/dashboard/invitations", icon: "mail" },
   { label: "Settings", href: "/dashboard/settings", icon: "settings" },
