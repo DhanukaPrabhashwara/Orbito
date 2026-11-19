@@ -123,6 +123,8 @@ export default function ProjectDetailsClient({
     const [showEditProject, setShowEditProject] = useState(false);
     const [editProjectLoading, setEditProjectLoading] = useState(false);
     const [editProjectError, setEditProjectError] = useState("");
+    const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
+    const [deleteProjectError, setDeleteProjectError] = useState("");
 
     const [editProjectForm, setEditProjectForm] = useState({
         name: "",
@@ -432,7 +434,37 @@ export default function ProjectDetailsClient({
         }
     }
 
+    async function handleDeleteProject() {
+        if (!window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+            return;
+        }
 
+        setDeleteProjectLoading(true);
+        setDeleteProjectError("");
+
+        try {
+            const response = await fetch(
+                `/api/organizations/${organizationId}/projects/${projectId}`,
+                {
+                    method: "DELETE",
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to delete project.");
+            }
+
+            window.location.href = "/dashboard/projects";
+        } catch (err) {
+            setDeleteProjectError(
+                err instanceof Error ? err.message : "Something went wrong."
+            );
+        } finally {
+            setDeleteProjectLoading(false);
+        }
+    }
 
     if (loading) {
         return (
@@ -671,13 +703,26 @@ export default function ProjectDetailsClient({
                     </div>
 
                     {canManageProject && (
-                        <button
-                            type="button"
-                            onClick={openEditProject}
-                            className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
-                        >
-                            Edit project
-                        </button>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={openEditProject}
+                                className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                            >
+                                Edit project
+                            </button>
+
+                            {role === "OWNER" && (
+                                <button
+                                    type="button"
+                                    onClick={handleDeleteProject}
+                                    disabled={deleteProjectLoading}
+                                    className="inline-flex w-fit items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {deleteProjectLoading ? "Deleting..." : "Delete project"}
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
 
@@ -704,6 +749,12 @@ export default function ProjectDetailsClient({
                     </div>
                 </div>
             </section>
+
+            {deleteProjectError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {deleteProjectError}
+                </div>
+            )}
 
             <section className="grid gap-4 sm:grid-cols-2">
                 <div className="ui-panel flex items-center gap-4 p-5">
