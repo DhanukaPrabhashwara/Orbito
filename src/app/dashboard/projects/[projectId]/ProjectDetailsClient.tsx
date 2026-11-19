@@ -120,6 +120,17 @@ export default function ProjectDetailsClient({
     const [memberActionLoading, setMemberActionLoading] = useState(false);
     const [memberError, setMemberError] = useState("");
     const [memberSuccess, setMemberSuccess] = useState("");
+    const [showEditProject, setShowEditProject] = useState(false);
+    const [editProjectLoading, setEditProjectLoading] = useState(false);
+    const [editProjectError, setEditProjectError] = useState("");
+
+    const [editProjectForm, setEditProjectForm] = useState({
+        name: "",
+        description: "",
+        status: "PLANNING" as ProjectStatus,
+        startDate: "",
+        dueDate: "",
+    });
 
     const canManageProject =
         role === "OWNER" || role === "MANAGER";
@@ -329,6 +340,100 @@ export default function ProjectDetailsClient({
     }
 
 
+    function openEditProject() {
+        if (!project) return;
+
+        setEditProjectForm({
+            name: project.name,
+            description: project.description || "",
+            status: project.status,
+            startDate: project.startDate
+                ? project.startDate.slice(0, 10)
+                : "",
+            dueDate: project.dueDate
+                ? project.dueDate.slice(0, 10)
+                : "",
+        });
+
+        setEditProjectError("");
+        setShowEditProject(true);
+    }
+
+    async function handleUpdateProject(
+        event: React.FormEvent<HTMLFormElement>
+    ) {
+        event.preventDefault();
+
+        if (!editProjectForm.name.trim()) {
+            setEditProjectError("Project name is required.");
+            return;
+        }
+
+        if (
+            editProjectForm.startDate &&
+            editProjectForm.dueDate &&
+            editProjectForm.dueDate < editProjectForm.startDate
+        ) {
+            setEditProjectError(
+                "Due date cannot be earlier than the start date."
+            );
+            return;
+        }
+
+        try {
+            setEditProjectLoading(true);
+            setEditProjectError("");
+
+            const response = await fetch(
+                `/api/organizations/${organizationId}/projects/${projectId}`,
+                {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        name: editProjectForm.name.trim(),
+                        description: editProjectForm.description.trim(),
+                        status: editProjectForm.status,
+                        startDate: editProjectForm.startDate || null,
+                        dueDate: editProjectForm.dueDate || null,
+                    }),
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error || "Unable to update project."
+                );
+            }
+
+            setProject((current) =>
+                current
+                    ? {
+                        ...current,
+                        ...data.project,
+                        members: current.members,
+                        _count: current._count,
+                    }
+                    : current
+            );
+
+            setShowEditProject(false);
+        } catch (err) {
+            setEditProjectError(
+                err instanceof Error
+                    ? err.message
+                    : "Something went wrong while updating the project."
+            );
+        } finally {
+            setEditProjectLoading(false);
+        }
+    }
+
+
+
     if (loading) {
         return (
             <div className="ui-panel flex items-center justify-center p-12">
@@ -368,6 +473,158 @@ export default function ProjectDetailsClient({
 
     return (
         <div className="space-y-8">
+
+            {showEditProject && canManageProject && (
+                <div className="ui-panel p-6">
+                    <div className="mb-6 flex items-center justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold text-slate-900">
+                                Edit project
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-500">
+                                Update your project information.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setShowEditProject(false);
+                                setEditProjectError("");
+                            }}
+                            className="text-sm font-medium text-slate-500 hover:text-slate-800"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleUpdateProject} className="space-y-5">
+                        {editProjectError && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                {editProjectError}
+                            </div>
+                        )}
+
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-slate-700">
+                                Project name
+                            </label>
+                            <input
+                                type="text"
+                                required
+                                maxLength={100}
+                                value={editProjectForm.name}
+                                onChange={(event) =>
+                                    setEditProjectForm((current) => ({
+                                        ...current,
+                                        name: event.target.value,
+                                    }))
+                                }
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-slate-700">
+                                Description
+                            </label>
+                            <textarea
+                                rows={4}
+                                maxLength={5000}
+                                value={editProjectForm.description}
+                                onChange={(event) =>
+                                    setEditProjectForm((current) => ({
+                                        ...current,
+                                        description: event.target.value,
+                                    }))
+                                }
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-slate-700">
+                                Status
+                            </label>
+                            <select
+                                value={editProjectForm.status}
+                                onChange={(event) =>
+                                    setEditProjectForm((current) => ({
+                                        ...current,
+                                        status: event.target.value as ProjectStatus,
+                                    }))
+                                }
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+                            >
+                                <option value="PLANNING">Planning</option>
+                                <option value="ACTIVE">Active</option>
+                                <option value="ON_HOLD">On hold</option>
+                                <option value="COMPLETED">Completed</option>
+                                <option value="ARCHIVED">Archived</option>
+                            </select>
+                        </div>
+
+                        <div className="grid gap-5 sm:grid-cols-2">
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-slate-700">
+                                    Start date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={editProjectForm.startDate}
+                                    onChange={(event) =>
+                                        setEditProjectForm((current) => ({
+                                            ...current,
+                                            startDate: event.target.value,
+                                        }))
+                                    }
+                                    className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-slate-700">
+                                    Due date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={editProjectForm.dueDate}
+                                    onChange={(event) =>
+                                        setEditProjectForm((current) => ({
+                                            ...current,
+                                            dueDate: event.target.value,
+                                        }))
+                                    }
+                                    className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowEditProject(false);
+                                    setEditProjectError("");
+                                }}
+                                disabled={editProjectLoading}
+                                className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                type="submit"
+                                disabled={editProjectLoading}
+                                className="rounded-lg bg-[#202054] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-900 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {editProjectLoading ? "Saving..." : "Save changes"}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
             <div>
                 <Link
                     href="/dashboard/projects"
@@ -416,9 +673,8 @@ export default function ProjectDetailsClient({
                     {canManageProject && (
                         <button
                             type="button"
-                            disabled
-                            title="Project editing will be added in the next step."
-                            className="inline-flex w-fit cursor-not-allowed items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-400"
+                            onClick={openEditProject}
+                            className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
                         >
                             Edit project
                         </button>
