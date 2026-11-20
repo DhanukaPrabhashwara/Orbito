@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Icon, PageHeader } from "@/components/ui";
+import EditTaskForm from "@/components/tasks/EditTaskForm";
 
 type ProjectStatus =
     | "PLANNING"
@@ -67,6 +68,35 @@ type OrganizationMember = {
     };
 };
 
+type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
+
+type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+
+type Task = {
+    id: string;
+    title: string;
+    description: string | null;
+    status: TaskStatus;
+    priority: TaskPriority;
+    dueDate: string | null;
+    createdAt: string;
+    updatedAt: string;
+    createdBy: {
+        id: string;
+        name: string;
+    } | null;
+    assignedTo: {
+        id: string;
+        role: "OWNER" | "MANAGER" | "EMPLOYEE";
+        user: {
+            id: string;
+            name: string;
+            email: string;
+            image: string | null;
+        };
+    } | null;
+};
+
 type OrganizationMembersResponse = {
     members: OrganizationMember[];
     total: number;
@@ -109,6 +139,21 @@ export default function ProjectDetailsClient({
     role,
 }: ProjectDetailsClientProps) {
     const [project, setProject] = useState<Project | null>(null);
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [tasksLoading, setTasksLoading] = useState(false);
+    const [tasksError, setTasksError] = useState("");
+    const [showCreateTask, setShowCreateTask] = useState(false);
+    const [createTaskLoading, setCreateTaskLoading] = useState(false);
+    const [createTaskError, setCreateTaskError] = useState("");
+    const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+
+    const [taskForm, setTaskForm] = useState({
+        title: "",
+        description: "",
+        priority: "MEDIUM" as TaskPriority,
+        dueDate: "",
+        assignedToMembershipId: "",
+    });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
@@ -192,6 +237,10 @@ export default function ProjectDetailsClient({
         return () => controller.abort();
     }, [organizationId, projectId]);
 
+    useEffect(() => {
+        fetchTasks();
+    }, [organizationId, projectId]);
+
     async function fetchOrganizationMembers() {
         try {
             setMembersLoading(true);
@@ -219,6 +268,94 @@ export default function ProjectDetailsClient({
             );
         } finally {
             setMembersLoading(false);
+        }
+    }
+
+    async function fetchTasks() {
+        setTasksLoading(true);
+        setTasksError("");
+
+        try {
+            const response = await fetch(
+                `/api/organizations/${organizationId}/projects/${projectId}/tasks`
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to load project tasks.");
+            }
+
+            setTasks(data.tasks);
+        } catch (error) {
+            setTasksError(
+                error instanceof Error
+                    ? error.message
+                    : "Something went wrong while loading tasks."
+            );
+        } finally {
+            setTasksLoading(false);
+        }
+    }
+
+    async function handleCreateTask(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault();
+
+        setCreateTaskError("");
+
+        const title = taskForm.title.trim();
+
+        if (!title) {
+            setCreateTaskError("Task title is required.");
+            return;
+        }
+
+        setCreateTaskLoading(true);
+
+        try {
+            const response = await fetch(
+                `/api/organizations/${organizationId}/projects/${projectId}/tasks`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        title,
+                        description: taskForm.description.trim() || null,
+                        priority: taskForm.priority,
+                        dueDate: taskForm.dueDate || null,
+                        assignedToMembershipId:
+                            taskForm.assignedToMembershipId || null,
+                    }),
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to create task.");
+            }
+
+            setTaskForm({
+                title: "",
+                description: "",
+                priority: "MEDIUM",
+                dueDate: "",
+                assignedToMembershipId: "",
+            });
+
+            setShowCreateTask(false);
+
+            await fetchTasks();
+        } catch (error) {
+            setCreateTaskError(
+                error instanceof Error
+                    ? error.message
+                    : "Something went wrong while creating the task."
+            );
+        } finally {
+            setCreateTaskLoading(false);
         }
     }
 
@@ -953,27 +1090,283 @@ export default function ProjectDetailsClient({
             </section>
 
             <section className="ui-panel p-6">
-                <div>
-                    <h2 className="text-base font-semibold text-slate-900">
-                        Project tasks
-                    </h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                        Tasks associated with this project.
-                    </p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 className="text-base font-semibold text-slate-900">
+                            Project tasks
+                        </h2>
+                        <p className="mt-1 text-sm text-slate-500">
+                            Tasks associated with this project.
+                        </p>
+                    </div>
+
+                    {canManageProject && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setCreateTaskError("");
+                                setShowCreateTask((previous) => !previous);
+                            }}
+                            className="inline-flex items-center justify-center rounded-lg bg-[#202054] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#29296b]"
+                        >
+                            {showCreateTask ? "Cancel" : "Create task"}
+                        </button>
+                    )}
                 </div>
 
-                <div className="mt-5 flex flex-col items-center py-8 text-center">
-                    <Icon
-                        name="check"
-                        className="h-8 w-8 text-slate-300"
-                    />
-                    <p className="mt-3 text-sm font-medium text-slate-700">
-                        Task overview coming next
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                        We'll add task listing and management in the next step.
-                    </p>
-                </div>
+                {canManageProject && showCreateTask && (
+                    <form
+                        onSubmit={handleCreateTask}
+                        className="mt-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                        {createTaskError && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                                <p className="text-sm text-red-600">
+                                    {createTaskError}
+                                </p>
+                            </div>
+                        )}
+
+                        <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">
+                                Task title
+                            </label>
+                            <input
+                                type="text"
+                                required
+                                maxLength={200}
+                                value={taskForm.title}
+                                onChange={(e) =>
+                                    setTaskForm((previous) => ({
+                                        ...previous,
+                                        title: e.target.value,
+                                    }))
+                                }
+                                placeholder="Enter task title"
+                                className="ui-input w-full"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">
+                                Description
+                            </label>
+                            <textarea
+                                maxLength={5000}
+                                rows={3}
+                                value={taskForm.description}
+                                onChange={(e) =>
+                                    setTaskForm((previous) => ({
+                                        ...previous,
+                                        description: e.target.value,
+                                    }))
+                                }
+                                placeholder="Describe the task..."
+                                className="ui-input w-full"
+                            />
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">
+                                    Priority
+                                </label>
+                                <select
+                                    value={taskForm.priority}
+                                    onChange={(e) =>
+                                        setTaskForm((previous) => ({
+                                            ...previous,
+                                            priority: e.target.value as TaskPriority,
+                                        }))
+                                    }
+                                    className="ui-input w-full"
+                                >
+                                    <option value="LOW">Low</option>
+                                    <option value="MEDIUM">Medium</option>
+                                    <option value="HIGH">High</option>
+                                    <option value="URGENT">Urgent</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">
+                                    Due date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={taskForm.dueDate}
+                                    onChange={(e) =>
+                                        setTaskForm((previous) => ({
+                                            ...previous,
+                                            dueDate: e.target.value,
+                                        }))
+                                    }
+                                    className="ui-input w-full"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">
+                                Assign to
+                            </label>
+                            <select
+                                value={taskForm.assignedToMembershipId}
+                                onChange={(e) =>
+                                    setTaskForm((previous) => ({
+                                        ...previous,
+                                        assignedToMembershipId: e.target.value,
+                                    }))
+                                }
+                                className="ui-input w-full"
+                            >
+                                <option value="">Unassigned</option>
+
+                                {(project?.members ?? []).map((member) => (
+                                    <option
+                                        key={member.membership.id}
+                                        value={member.membership.id}
+                                    >
+                                        {member.membership.user.name} (
+                                        {member.membership.role})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex flex-wrap justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowCreateTask(false);
+                                    setCreateTaskError("");
+                                }}
+                                disabled={createTaskLoading}
+                                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                type="submit"
+                                disabled={createTaskLoading}
+                                className="rounded-lg bg-[#202054] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#29296b] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {createTaskLoading ? "Creating..." : "Create task"}
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {tasksLoading ? (
+                    <div className="py-10 text-center">
+                        <p className="text-sm text-slate-500">
+                            Loading tasks...
+                        </p>
+                    </div>
+                ) : tasksError ? (
+                    <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
+                        <p className="text-sm text-red-600">
+                            {tasksError}
+                        </p>
+                    </div>
+                ) : tasks.length === 0 ? (
+                    <div className="mt-5 flex flex-col items-center py-8 text-center">
+                        <Icon
+                            name="check"
+                            className="h-8 w-8 text-slate-300"
+                        />
+                        <p className="mt-3 text-sm font-medium text-slate-700">
+                            No tasks yet
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                            Tasks created for this project will appear here.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="mt-5 divide-y divide-slate-100">
+                        {tasks.map((task) => (
+                            <div
+                                key={task.id}
+                                className="py-4 first:pt-0 last:pb-0"
+                            >
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div className="min-w-0">
+                                        <h3 className="text-sm font-semibold text-slate-900">
+                                            {task.title}
+                                        </h3>
+
+                                        {task.description && (
+                                            <p className="mt-1 text-sm text-slate-500">
+                                                {task.description}
+                                            </p>
+                                        )}
+
+                                        <p className="mt-2 text-xs text-slate-500">
+                                            Assigned to:{" "}
+                                            <span className="font-medium text-slate-700">
+                                                {task.assignedTo?.user.name || "Unassigned"}
+                                            </span>
+                                        </p>
+
+                                        {task.dueDate && (
+                                            <p className="mt-1 text-xs text-slate-500">
+                                                Due:{" "}
+                                                {new Date(task.dueDate).toLocaleDateString()}
+                                            </p>
+                                        )}
+                                    </div>
+
+
+                                    <div className="flex flex-wrap gap-2">
+                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                                            {task.status.replace("_", " ")}
+                                        </span>
+
+                                        <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
+                                            {task.priority}
+                                        </span>
+
+                                        {canManageProject && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setEditingTaskId((current) =>
+                                                        current === task.id ? null : task.id
+                                                    )
+                                                }
+                                                className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                                            >
+                                                {editingTaskId === task.id ? "Close" : "Edit"}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Closes the main task information row */}
+                                </div>
+
+                                {/* Add the edit form HERE */}
+                                {editingTaskId === task.id && canManageProject && (
+                                    <div className="mt-4">
+                                        <EditTaskForm
+                                            key={task.id}
+                                            task={task}
+                                            organizationId={organizationId}
+                                            projectId={projectId}
+                                            members={project.members}
+                                            onCancel={() => setEditingTaskId(null)}
+                                            onSuccess={async () => {
+                                                await fetchTasks();
+                                                setEditingTaskId(null);
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                                {/* Closes the individual task container */}
+                            </div>
+                        ))}
+                    </div>
+                )}
             </section>
         </div>
     );
