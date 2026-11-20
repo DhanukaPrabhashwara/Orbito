@@ -165,6 +165,36 @@ export async function PATCH(
 
     const body = await request.json();
 
+
+    // Employees may update only the status of their assigned tasks.
+    if (context.membership.role === "EMPLOYEE") {
+      if (
+        body === null ||
+        typeof body !== "object" ||
+        Array.isArray(body)
+      ) {
+        return NextResponse.json(
+          { error: "Invalid task update payload." },
+          { status: 400 }
+        );
+      }
+
+      const submittedFields = Object.keys(body);
+
+      if (
+        submittedFields.length !== 1 ||
+        submittedFields[0] !== "status"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Employees can only update the status of their assigned tasks.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     const data: {
       title?: string;
       description?: string | null;
@@ -259,7 +289,7 @@ export async function PATCH(
     if (body.assignedToMembershipId !== undefined) {
       const membershipId =
         body.assignedToMembershipId === null ||
-        body.assignedToMembershipId === ""
+          body.assignedToMembershipId === ""
           ? null
           : typeof body.assignedToMembershipId === "string"
             ? body.assignedToMembershipId.trim()

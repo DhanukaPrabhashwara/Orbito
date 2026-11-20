@@ -40,11 +40,14 @@ export default async function ProjectDetailsPage({
     redirect("/login");
   }
 
+
   return (
     <ProjectDetailsClient
       organizationId={membership.organizationId}
       projectId={projectId}
       role={membership.role}
+      currentUserId={session.user.id}
     />
   );
+
 }

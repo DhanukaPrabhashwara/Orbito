@@ -55,6 +55,7 @@ type ProjectDetailsClientProps = {
     organizationId: string;
     projectId: string;
     role: "OWNER" | "MANAGER" | "EMPLOYEE";
+    currentUserId: string;
 };
 
 type OrganizationMember = {
@@ -137,6 +138,7 @@ export default function ProjectDetailsClient({
     organizationId,
     projectId,
     role,
+    currentUserId,
 }: ProjectDetailsClientProps) {
     const [project, setProject] = useState<Project | null>(null);
     const [tasks, setTasks] = useState<Task[]>([]);
