@@ -146,6 +146,8 @@ export default function ProjectDetailsClient({
     const [createTaskLoading, setCreateTaskLoading] = useState(false);
     const [createTaskError, setCreateTaskError] = useState("");
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+    const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+    const [deleteTaskError, setDeleteTaskError] = useState("");
 
     const [taskForm, setTaskForm] = useState({
         title: "",
@@ -358,6 +360,67 @@ export default function ProjectDetailsClient({
             setCreateTaskLoading(false);
         }
     }
+
+
+    async function handleDeleteTask(taskId: string, taskTitle: string) {
+        if (deletingTaskId !== null) return;
+
+        const confirmed = window.confirm(
+            `Are you sure you want to delete "${taskTitle}"? This action cannot be undone.`
+        );
+
+        if (!confirmed) return;
+
+        setDeletingTaskId(taskId);
+        setDeleteTaskError("");
+
+        try {
+            const response = await fetch(
+                `/api/organizations/${organizationId}/projects/${projectId}/tasks/${taskId}`,
+                {
+                    method: "DELETE",
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to delete task.");
+            }
+
+            // Remove the deleted task from the current list.
+            setTasks((current) =>
+                current.filter((task) => task.id !== taskId)
+            );
+
+            // Keep the project task count synchronized.
+            setProject((current) =>
+                current
+                    ? {
+                        ...current,
+                        _count: {
+                            ...current._count,
+                            tasks: Math.max(0, current._count.tasks - 1),
+                        },
+                    }
+                    : current
+            );
+
+            // Close the edit form if the deleted task was being edited.
+            setEditingTaskId((current) =>
+                current === taskId ? null : current
+            );
+        } catch (error) {
+            setDeleteTaskError(
+                error instanceof Error
+                    ? error.message
+                    : "Something went wrong while deleting the task."
+            );
+        } finally {
+            setDeletingTaskId(null);
+        }
+    }
+
 
     async function refreshProjectMembers() {
         const response = await fetch(
@@ -1095,6 +1158,16 @@ export default function ProjectDetailsClient({
                         <h2 className="text-base font-semibold text-slate-900">
                             Project tasks
                         </h2>
+
+                        {deleteTaskError && (
+                            <div
+                                role="alert"
+                                className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                            >
+                                {deleteTaskError}
+                            </div>
+                        )}
+
                         <p className="mt-1 text-sm text-slate-500">
                             Tasks associated with this project.
                         </p>
@@ -1340,6 +1413,18 @@ export default function ProjectDetailsClient({
                                                 {editingTaskId === task.id ? "Close" : "Edit"}
                                             </button>
                                         )}
+
+                                        {canManageProject && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeleteTask(task.id, task.title)}
+                                                disabled={deletingTaskId !== null}
+                                                className="rounded-lg border border-red-200 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                {deletingTaskId === task.id ? "Deleting..." : "Delete"}
+                                            </button>
+                                        )}
+
                                     </div>
 
                                     {/* Closes the main task information row */}
