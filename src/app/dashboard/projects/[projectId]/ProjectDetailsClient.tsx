@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Icon, PageHeader } from "@/components/ui";
 import EditTaskForm from "@/components/tasks/EditTaskForm";
+import EmployeeTaskStatus from "@/components/tasks/EmployeeTaskStatus";
 
 type ProjectStatus =
     | "PLANNING"
@@ -1433,6 +1434,8 @@ export default function ProjectDetailsClient({
                                 </div>
 
                                 {/* Add the edit form HERE */}
+
+                                {/* OWNER / MANAGER: Full task editing */}
                                 {editingTaskId === task.id && canManageProject && (
                                     <div className="mt-4">
                                         <EditTaskForm
@@ -1449,9 +1452,35 @@ export default function ProjectDetailsClient({
                                         />
                                     </div>
                                 )}
-                                {/* Closes the individual task container */}
+
+                                {/* EMPLOYEE: Status-only editing */}
+                                {role === "EMPLOYEE" &&
+                                    task.assignedTo?.user.id === currentUserId && (
+                                        <EmployeeTaskStatus
+                                            key={task.id}
+                                            organizationId={organizationId}
+                                            projectId={projectId}
+                                            taskId={task.id}
+                                            currentStatus={task.status}
+                                            onSuccess={(updatedStatus) => {
+                                                setTasks((currentTasks) =>
+                                                    currentTasks.map((currentTask) =>
+                                                        currentTask.id === task.id
+                                                            ? {
+                                                                ...currentTask,
+                                                                status: updatedStatus,
+                                                            }
+                                                            : currentTask
+                                                    )
+                                                );
+                                            }}
+                                        />
+                                    )}
+
+                                {/* Closing div of individual task */}
                             </div>
                         ))}
+
                     </div>
                 )}
             </section>
