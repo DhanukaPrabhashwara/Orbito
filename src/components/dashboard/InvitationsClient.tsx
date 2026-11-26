@@ -27,6 +27,16 @@ type Invitation = {
   };
 };
 
+type InvitationCapacity = {
+  plan: "FREE" | "PRO" | "BUSINESS";
+  status: "ACTIVE" | "CANCELED";
+  maxMembers: number | null;
+  currentMembers: number;
+  pendingInvitations: number;
+  availableSeats: number | null;
+  canInvite: boolean;
+};
+
 type InvitationsClientProps = {
   organizationId: string;
   currentRole: OrganizationRole;
@@ -37,6 +47,9 @@ export default function InvitationsClient({
   currentRole,
 }: InvitationsClientProps) {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [capacity, setCapacity] = useState<InvitationCapacity | null>(null);
+  const [capacityLoading, setCapacityLoading] = useState(true);
+  const [capacityError, setCapacityError] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<InvitationRole>("EMPLOYEE");
   const [invitationUrl, setInvitationUrl] = useState("");
@@ -50,6 +63,38 @@ export default function InvitationsClient({
   const canManageInvitations = currentRole !== "EMPLOYEE";
 
   const baseUrl = `/api/organizations/${organizationId}/invitations`;
+  const invitesDisabled =
+    creating || loading || capacityLoading || capacityError !== "" ||
+    capacity === null || !capacity.canInvite;
+
+  const requestCapacity = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch(
+      `/api/organizations/${organizationId}/invitations/capacity`,
+      { credentials: "include", signal },
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "Failed to load membership capacity.");
+    }
+    return data.capacity as InvitationCapacity;
+  }, [organizationId]);
+
+  const fetchCapacity = useCallback(async () => {
+    setCapacityLoading(true);
+    try {
+      const latest = await requestCapacity();
+      setCapacity(latest);
+      setCapacityError("");
+    } catch (err) {
+      setCapacity(null);
+      setCapacityError(
+        err instanceof Error ? err.message : "Failed to load membership capacity.",
+      );
+    } finally {
+      setCapacityLoading(false);
+    }
+  }, [requestCapacity]);
+
 
   const requestInvitations = useCallback(
     async (signal?: AbortSignal) => {
@@ -71,12 +116,13 @@ export default function InvitationsClient({
     try {
       setError("");
       setInvitations(await requestInvitations());
+      await fetchCapacity();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
-  }, [requestInvitations]);
+  }, [requestInvitations, fetchCapacity]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -96,10 +142,33 @@ export default function InvitationsClient({
     return () => controller.abort();
   }, [requestInvitations]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    requestCapacity(controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setCapacity(data);
+          setCapacityError("");
+        }
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) {
+          setCapacityError(
+            err instanceof Error ? err.message : "Failed to load membership capacity.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCapacityLoading(false);
+      });
+    return () => controller.abort();
+  }, [requestCapacity]);
+
   async function handleCreateInvitation(
     event: React.FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault();
+    if (invitesDisabled) return;
 
     setCreating(true);
     setError("");
@@ -128,6 +197,7 @@ export default function InvitationsClient({
       await fetchInvitations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
+      await fetchCapacity();
     } finally {
       setCreating(false);
     }
@@ -224,6 +294,46 @@ export default function InvitationsClient({
               </p>
             </div>
           </div>
+          <div className="border-b border-slate-100 px-6 py-4">
+            {capacityLoading ? (
+              <p className="text-xs text-slate-500">Checking member capacity...</p>
+            ) : capacityError ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-red-600">{capacityError}</p>
+                <button type="button" onClick={() => void fetchCapacity()} className="ui-button-secondary text-xs">
+                  Retry capacity check
+                </button>
+              </div>
+            ) : capacity && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-slate-700">
+                    {capacity.plan} plan · {capacity.currentMembers} members · {capacity.pendingInvitations} pending invitations
+                  </p>
+                  <span className={`ui-badge ${capacity.canInvite ? "bg-indigo-50 text-indigo-700 ring-indigo-200" : "bg-amber-50 text-amber-700 ring-amber-200"}`}>
+                    {capacity.maxMembers === null
+                      ? "Unlimited seats"
+                      : `${capacity.availableSeats} of ${capacity.maxMembers} seats available`}
+                  </span>
+                </div>
+                {capacity.maxMembers !== null && (
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+                    <div
+                      className={`h-full rounded-full ${capacity.canInvite ? "bg-indigo-500" : "bg-amber-500"}`}
+                      style={{ width: `${Math.min(100, 100 * (capacity.currentMembers + capacity.pendingInvitations) / capacity.maxMembers)}%` }}
+                    />
+                  </div>
+                )}
+                {!capacity.canInvite && (
+                  <p className="text-xs leading-5 text-amber-700">
+                    {capacity.status !== "ACTIVE"
+                      ? "Your organization's subscription is inactive. New invitations are disabled."
+                      : `Your ${capacity.plan} plan has reached its member limit, including reserved seats. Upgrade your subscription to invite more people.`}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
           <form
             onSubmit={handleCreateInvitation}
             className="grid grid-cols-1 gap-4 p-6 md:grid-cols-[minmax(0,1fr)_160px_auto]"
@@ -237,7 +347,7 @@ export default function InvitationsClient({
                 type="email"
                 autoComplete="email"
                 required
-                disabled={creating}
+                disabled={invitesDisabled}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="colleague@company.com"
@@ -251,7 +361,7 @@ export default function InvitationsClient({
               <select
                 id="invite-role"
                 value={role}
-                disabled={creating}
+                disabled={invitesDisabled}
                 onChange={(event) =>
                   setRole(event.target.value as InvitationRole)
                 }
@@ -264,7 +374,7 @@ export default function InvitationsClient({
             <div className="flex items-end">
               <button
                 type="submit"
-                disabled={creating}
+                disabled={invitesDisabled}
                 className="ui-button min-h-11 w-full"
               >
                 <Icon name="plus" className="h-4 w-4" />
