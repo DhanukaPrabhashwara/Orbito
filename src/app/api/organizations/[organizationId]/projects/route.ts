@@ -1,4 +1,4 @@
-
+import { getPlanLimits } from "@/lib/subscriptions/plans";
 import { NextResponse } from "next/server";
 import {
     requireOrganizationPermission,
@@ -157,7 +157,56 @@ export async function POST(
             );
         }
 
-        const project = await prisma.$transaction(async (tx) => {
+
+        const result = await prisma.$transaction(async (tx) => {
+            // Serialize project creation for this organization.
+            await tx.$queryRaw`
+        SELECT "id"
+        FROM "Organization"
+        WHERE "id" = ${context.organization.id}
+        FOR UPDATE
+    `;
+
+            // Retrieve the organization's subscription.
+            const subscription = await tx.organizationSubscription.findUnique({
+                where: {
+                    organizationId: context.organization.id,
+                },
+            });
+
+            if (!subscription) {
+                return {
+                    error: "Organization subscription not found.",
+                    statusCode: 409,
+                };
+            }
+
+            if (subscription.status !== "ACTIVE") {
+                return {
+                    error: "Your organization's subscription is not active.",
+                    statusCode: 403,
+                };
+            }
+
+            // Retrieve the project limit for the current plan.
+            const { maxProjects } = getPlanLimits(subscription.plan);
+
+            if (maxProjects !== null) {
+                const projectCount = await tx.project.count({
+                    where: {
+                        organizationId: context.organization.id,
+                    },
+                });
+
+                if (projectCount >= maxProjects) {
+                    return {
+                        error: `Your ${subscription.plan} plan allows a maximum of ${maxProjects} projects. Upgrade your subscription to create more.`,
+                        statusCode: 403,
+                    };
+                }
+            }
+
+            // Preserve the existing project creation behavior.
             const newProject = await tx.project.create({
                 data: {
                     name,
@@ -177,8 +226,21 @@ export async function POST(
                 },
             });
 
-            return newProject;
+            return {
+                project: newProject,
+            };
         });
+
+        // Handle subscription validation errors.
+        if ("error" in result) {
+            return NextResponse.json(
+                { error: result.error },
+                { status: result.statusCode }
+            );
+        }
+
+        const project = result.project;
+
 
         return NextResponse.json(
             {

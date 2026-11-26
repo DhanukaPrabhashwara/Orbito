@@ -60,6 +60,14 @@ export const auth = betterAuth({
                 role: "OWNER",
               },
             });
+            // Assign the FREE subscription to the new workspace.
+            await tx.organizationSubscription.create({
+              data: {
+                organizationId: organization.id,
+                plan: "FREE",
+                status: "ACTIVE",
+              },
+            });
           });
         },
       },
