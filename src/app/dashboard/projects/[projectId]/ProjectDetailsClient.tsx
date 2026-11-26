@@ -104,6 +104,20 @@ type OrganizationMembersResponse = {
     total: number;
 };
 
+type TaskCapacity = {
+    plan: "FREE" | "PRO" | "BUSINESS";
+    status: "ACTIVE" | "CANCELED";
+    currentTasks: number;
+    maxTasks: number | null;
+    remainingTasks: number | null;
+    canCreate: boolean;
+};
+
+type TaskCapacityResponse = {
+    success: boolean;
+    capacity: TaskCapacity;
+};
+
 type ProjectMembersResponse = {
     members: Project["members"];
     total: number;
@@ -145,6 +159,9 @@ export default function ProjectDetailsClient({
     const [tasks, setTasks] = useState<Task[]>([]);
     const [tasksLoading, setTasksLoading] = useState(false);
     const [tasksError, setTasksError] = useState("");
+    const [taskCapacity, setTaskCapacity] = useState<TaskCapacity | null>(null);
+    const [taskCapacityLoading, setTaskCapacityLoading] = useState(true);
+    const [taskCapacityError, setTaskCapacityError] = useState("");
     const [showCreateTask, setShowCreateTask] = useState(false);
     const [createTaskLoading, setCreateTaskLoading] = useState(false);
     const [createTaskError, setCreateTaskError] = useState("");
@@ -276,6 +293,32 @@ export default function ProjectDetailsClient({
         }
     }
 
+    async function fetchTaskCapacity() {
+        setTaskCapacityLoading(true);
+        setTaskCapacityError("");
+        setTaskCapacity(null);
+
+        try {
+            const response = await fetch(
+                `/api/organizations/${organizationId}/projects/${projectId}/tasks/capacity`,
+                { credentials: "same-origin", cache: "no-store" }
+            );
+            const data = await response.json();
+
+            if (!response.ok || !data.capacity) {
+                throw new Error(data.error || "Unable to load task capacity.");
+            }
+
+            setTaskCapacity((data as TaskCapacityResponse).capacity);
+        } catch (error) {
+            setTaskCapacityError(
+                error instanceof Error ? error.message : "Unable to load task capacity."
+            );
+        } finally {
+            setTaskCapacityLoading(false);
+        }
+    }
+
     async function fetchTasks() {
         setTasksLoading(true);
         setTasksError("");
@@ -292,6 +335,7 @@ export default function ProjectDetailsClient({
             }
 
             setTasks(data.tasks);
+            await fetchTaskCapacity();
         } catch (error) {
             setTasksError(
                 error instanceof Error
@@ -307,6 +351,11 @@ export default function ProjectDetailsClient({
         e.preventDefault();
 
         setCreateTaskError("");
+
+        if (!taskCapacity?.canCreate || taskCapacityLoading) {
+            setCreateTaskError("Task creation is unavailable. Please check the project's task capacity.");
+            return;
+        }
 
         const title = taskForm.title.trim();
 
@@ -390,6 +439,9 @@ export default function ProjectDetailsClient({
             if (!response.ok) {
                 throw new Error(data.error || "Failed to delete task.");
             }
+
+            // Refresh server-calculated capacity after deletion.
+            void fetchTaskCapacity();
 
             // Remove the deleted task from the current list.
             setTasks((current) =>
@@ -1183,14 +1235,66 @@ export default function ProjectDetailsClient({
                                 setCreateTaskError("");
                                 setShowCreateTask((previous) => !previous);
                             }}
-                            className="inline-flex items-center justify-center rounded-lg bg-[#202054] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#29296b]"
+                            disabled={!showCreateTask && (taskCapacityLoading || !taskCapacity?.canCreate)}
+                            className="inline-flex items-center justify-center rounded-lg bg-[#202054] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#29296b] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             {showCreateTask ? "Cancel" : "Create task"}
                         </button>
                     )}
                 </div>
 
-                {canManageProject && showCreateTask && (
+                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-slate-800">Project task capacity</h3>
+                        {taskCapacity && (
+                            <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                                {taskCapacity.plan} plan
+                            </span>
+                        )}
+                    </div>
+
+                    {taskCapacityLoading ? (
+                        <p className="mt-2 text-sm text-slate-500">Loading task capacity...</p>
+                    ) : taskCapacityError ? (
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                            <p role="alert" className="text-sm text-red-600">{taskCapacityError}</p>
+                            <button type="button" onClick={() => void fetchTaskCapacity()}
+                                className="text-sm font-medium text-indigo-700 hover:underline">
+                                Retry
+                            </button>
+                        </div>
+                    ) : taskCapacity ? (
+                        <>
+                            <p className="mt-2 text-sm text-slate-600">
+                                {taskCapacity.currentTasks} / {taskCapacity.maxTasks === null ? "Unlimited" : taskCapacity.maxTasks} tasks used
+                                {taskCapacity.remainingTasks !== null &&
+                                    ` · ${taskCapacity.remainingTasks} remaining`}
+                            </p>
+                            {taskCapacity.maxTasks !== null && (
+                                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200"
+                                    role="progressbar"
+                                    aria-label="Project task capacity used"
+                                    aria-valuemin={0}
+                                    aria-valuemax={taskCapacity.maxTasks}
+                                    aria-valuenow={Math.min(taskCapacity.currentTasks, taskCapacity.maxTasks)}>
+                                    <div
+                                        className={`h-full rounded-full ${taskCapacity.canCreate ? "bg-indigo-600" : "bg-amber-500"}`}
+                                        style={{ width: `${Math.min(100, (taskCapacity.currentTasks / taskCapacity.maxTasks) * 100)}%` }}
+                                    />
+                                </div>
+                            )}
+                            {!taskCapacity.canCreate && (
+                                <p role="status" className="mt-3 text-sm font-medium text-amber-700">
+                                    {taskCapacity.status !== "ACTIVE"
+                                        ? "Your organization's subscription is not active. Task creation is unavailable."
+                                        : `This project has reached its ${taskCapacity.plan} plan task limit. Upgrade to create more tasks.`}
+                                </p>
+                            )}
+                        </>
+                    ) : null}
+                </div>
+
+                {canManageProject && showCreateTask && taskCapacity?.canCreate && (
                     <form
                         onSubmit={handleCreateTask}
                         className="mt-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
